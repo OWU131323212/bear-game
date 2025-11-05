@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        background-color: #f0f0f0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        font-family: sans-serif;
+        overflow: hidden;
+      }
+      .bear-face {
+        width: 250px;
+        height: 220px;
+        background-color: #d2a679;
+        border-radius: 50%;
+        position: relative;
+        border: 5px solid #5c3d2e;
+      }
+      .ear {
+        width: 80px;
+        height: 80px;
+        background-color: #d2a679;
+        border-radius: 50%;
+        position: absolute;
+        top: -20px;
+        border: 5px solid #5c3d2e;
+      }
+      .ear.left { left: -20px; }
+      .ear.right { right: -20px; }
+      .eye {
+        width: 25px;
+        height: 25px;
+        background-color: black;
+        border-radius: 50%;
+        position: absolute;
+        top: 80px;
+      }
+      .eye.left { left: 50px; }
+      .eye.right { right: 50px; }
+      .snout {
+        width: 100px;
+        height: 70px;
+        background-color: #e6c2a1;
+        border-radius: 50%;
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .controls {
+        position: absolute;
+        bottom: -40px; /* クマの顔に近づける */
+        width: 100%;
+        text-align: center;
+      }
+      #contents {
+        color: #333;
+        font-size: 0.9em;
+        margin-bottom: 10px;
+      }
+      #connect {
+        width: 120px;
+        height: 50px;
+        background-color: #5c3d2e;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        color: white;
+        font-weight: bold;
+        font-size: 1.2em;
+      }
+      .flower {
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        background-color: #ffb6c1; /* ライトピンク */
+        border-radius: 50%;
+        border: 2px solid white;
+      }
+      .flower::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 12px;
+        background-color: yellow;
+        border-radius: 50%;
+      }
+      .flower.f1 { top: -30px; left: 40px; }
+      .flower.f2 { top: 0px; right: -30px; }
+      .flower.f3 { bottom: -20px; left: 10px; }
+    </style>
+  </head>
+
+  <body>
+    <div class="bear-face">
+      <div class="ear left"></div>
+      <div class="ear right"></div>
+      <div class="eye left"></div>
+      <div class="eye right"></div>
+      <div class="snout"></div>
+      <div class="flower f1"></div>
+      <div class="flower f2"></div>
+      <div class="flower f3"></div>
+    </div>
+    <div class="controls">
+      <p id="contents">デバイスを傾けてね！</p>
+      <button id="connect">接続</button>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+
+      let devid = sessionStorage.getItem("clientId");
+      if (!devid) {
+        devid = Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem("clientId", devid);
+      }
+
+      let decPlaces = 2;
+      let interval = 50; // 20 fps
+      let alpha = 0,
+        beta = 0,
+        gamma = 0;
+      let z = 0;
+
+      document.querySelector("#connect").addEventListener("click", () => {
+        console.log("接続ボタンがクリックされました");
+        // センサーデータの送信を開始
+        setInterval(() => {
+          socket.emit("sensor", {
+            id: devid,
+            a: alpha,
+            b: beta,
+            g: gamma,
+            z: z,
+          });
+        }, interval);
+
+        // ボタンを非表示にする
+        document.querySelector("#connect").style.display = "none";
+        document.querySelector("#contents").textContent = "接続しました！";
+
+        // iOS向けにセンサーの許可をリクエスト
+        request_permission();
+      });
+
+      window.ondevicemotion = (event) => {
+        z = event.accelerationIncludingGravity.z.toFixed(decPlaces);
+      };
+
+      window.ondeviceorientation = (event) => {
+        alpha = event.alpha.toFixed(decPlaces);
+        beta = event.beta.toFixed(decPlaces);
+        gamma = event.gamma.toFixed(decPlaces);
+      };
+
+      function request_permission() {
+        if (
+          typeof DeviceMotionEvent !== "undefined" &&
+          typeof DeviceMotionEvent.requestPermission === "function"
+        ) {
+          DeviceMotionEvent.requestPermission();
+        }
+        if (
+          typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function"
+        ) {
+          DeviceOrientationEvent.requestPermission();
+        }
+      }
+    </script>
+  </body>
+</html>

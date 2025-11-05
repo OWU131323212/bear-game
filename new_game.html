@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>クマさんレースゲーム</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.1.9/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.3/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background-color: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(255, 255, 255, 0.8);
+        color: black;
+        padding: 20px;
+        border-radius: 10px;
+        font-size: 2em;
+        display: none; /* 最初は非表示 */
+      }
+      #connect {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>クマさんレースゲーム</h1>
+    <div id="info">
+      <div>あなたのID: <span id="myid"></span></div>
+      <div><strong>操作方法:</strong></div>
+      <div>左右の傾き: 左右に移動</div>
+      <div>上下に振る: 前に進む</div>
+    </div>
+    <div id="message">ゴール！</div>
+    <button id="connect">ルームに入る</button>
+    <script>
+      let socket = io.connect();
+
+      // --- 効果音の準備 ---
+      const goalSound = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1 } }).toDestination();
+      const crashSound = new Tone.MembraneSynth({ pitchDecay: 0.1, octaves: 2, envelope: { attack: 0.01, decay: 0.2, sustain: 0 } }).toDestination();
+
+      const connectBtn = document.querySelector("#connect");
+
+      let b = 0;
+      let g = 0;
+      let z = 0; // Z軸の加速度
+
+      // --- ユーザーIDの管理 ---
+      let myid = sessionStorage.getItem('clientId');
+      if (!myid) {
+        myid = Math.random().toString(36).substring(2, 15);
+        sessionStorage.setItem('clientId', myid);
+      }
+      document.querySelector("#myid").innerHTML = myid;
+      console.log("あなたのID: ", myid);
+
+      // --- 接続処理 ---
+      connectBtn.addEventListener("click", async function () {
+        await Tone.start(); // ユーザー操作をきっかけにオーディオを開始
+        console.log("Audio is ready");
+        socket.emit("join", "game");
+        connectBtn.remove();
+      });
+    
+      // --- センサーデータ受信処理 ---
+      socket.on("sensor", function (data) {
+        g = parseFloat(data.g);
+        b = parseFloat(data.b);
+        z = parseFloat(data.z); // zの値も受け取る
+      });
+
+      // --- p5.js ---
+      let bearX = 0;
+      let bearY = 0;
+      const leftRightSpeed = 0.2;
+      const forwardSpeed = 1.0;
+      
+      const courseWidth = 600;  // 道の幅を2倍に
+      const courseLength = 3000; // 道の長さを長く
+      const courseEdge = courseWidth / 2;
+      const goalY = -courseLength / 2;
+
+      const obstacles = [];
+      const numObstacles = 10; // 障害物の数
+
+      function setup() {
+        createCanvas(windowWidth, windowHeight, WEBGL);
+        noStroke();
+
+        // 障害物の位置をランダムに設定
+        for (let i = 0; i < numObstacles; i++) {
+          obstacles.push({
+            x: random(-courseEdge + 30, courseEdge - 30),
+            y: random(goalY + 200, -200) // スタートとゴール付近を避ける
+          });
+        }
+      }
+
+      function draw() {
+        background(135, 206, 235); // 空色の背景
+        orbitControl();
+        ambientLight(150, 150, 150);
+        directionalLight(255, 255, 255, 0, -1, -1);
+
+        // カメラをクマの後ろに設定
+        camera(bearX, bearY + 200, 200, bearX, bearY, 0, 0, 1, 0);
+
+        // コースの描画
+        push();
+        translate(0, 0, -15);
+        fill(34, 139, 34); // 草原のような緑
+        box(courseWidth, courseLength, 30);
+        pop();
+
+        // ゴールの描画
+        push();
+        translate(0, goalY, 20);
+        fill(255, 105, 180); // ピンク
+        box(courseWidth, 20, 40);
+        pop();
+
+        // 障害物の描画
+        for (const obs of obstacles) {
+          push();
+          translate(obs.x, obs.y, 15);
+          fill(119, 136, 153); // スレートグレイ
+          box(40, 40, 60);
+          pop();
+        }
+
+        // クマの動きの計算
+        // 左右移動
+        bearX += g * leftRightSpeed;
+
+        // 前進 (Z軸の加速度が一定以上なら進む)
+        // 9.8は重力加速度。それより大きい値なら振られたと判断
+        if (Math.abs(z) > 11) {
+            bearY -= forwardSpeed * (Math.abs(z) - 9.8);
+        }
+
+        // コースアウト判定
+        if (bearX > courseEdge - 20 || bearX < -courseEdge + 20) {
+            crashSound.triggerAttackRelease("C2", "8n");
+            // スタート地点に戻す
+            bearX = 0;
+            bearY = 0;
+        }
+
+        // 障害物との衝突判定
+        for (const obs of obstacles) {
+          if (dist(bearX, bearY, obs.x, obs.y) < 40) { // 40はクマと障害物の大きさに基づく閾値
+            crashSound.triggerAttackRelease("C2", "8n");
+            // スタート地点に戻す
+            bearX = 0;
+            bearY = 0;
+          }
+        }
+
+        // ゴール判定
+        if (bearY < goalY) {
+            if (document.getElementById("message").style.display !== "block") {
+              goalSound.triggerAttackRelease("C5", "0.5");
+            }
+            document.getElementById("message").style.display = "block";
+            bearY = goalY; // ゴールで行き止まり
+        } else {
+            document.getElementById("message").style.display = "none";
+        }
+
+        // クマの描画
+        drawBear(bearX, bearY);
+      }
+
+      // クマを描画する関数
+      function drawBear(x, y) {
+        push();
+        translate(x, y, 20); // 地面から少し浮かせる
+        
+        // クマの色
+        fill(139, 69, 19); // 茶色
+
+        // 体
+        push();
+        translate(0, 0, 20);
+        sphere(30);
+        pop();
+
+        // 頭
+        push();
+        translate(0, 0, 60);
+        sphere(25);
+        pop();
+
+        // 耳
+        push();
+        translate(-20, 0, 80);
+        sphere(10);
+        pop();
+        push();
+        translate(20, 0, 80);
+        sphere(10);
+        pop();
+
+        // 目
+        fill(0); // 黒
+        push();
+        translate(-10, -22, 70);
+        sphere(3);
+        pop();
+        push();
+        translate(10, -22, 70);
+        sphere(3);
+        pop();
+
+        pop();
+      }
+    </script>
+  </body>
+</html>
