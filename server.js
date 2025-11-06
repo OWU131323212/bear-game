@@ -5,11 +5,14 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 const io = new Server(server);
 
+// publicディレクトリ内の静的ファイル（HTMLやCSSなど）を配信するように設定します
+app.use(express.static('public'));
 // プロジェクトのルートディレクトリにある静的ファイル（new_game.htmlなど）を配信するように設定します
 app.use(express.static(__dirname));
 
 // ルートURL ("/") にアクセスがあった場合に new_game.html を表示します
-app.get('/', (req, res) => { res.sendFile(__dirname + '/new_game.html'); });
+// ルートURL ("/") にアクセスがあった場合に new_game.html を表示します。public/index.html を表示する場合は、'/public/index.html' に変更してください。
+app.get('/', (req, res) => { res.sendFile(__dirname + '/public/index.html'); });
 
 io.on('connection', (socket) => {
   // Chat functionality (for index.html)
@@ -34,6 +37,8 @@ io.on('connection', (socket) => {
   socket.on('sensor', (data) => {
     // センサーデータを'game'ルームにいる他のクライアントに送信する
     socket.to('game').emit('sensor', data);
+    // センサーデータを'game'ルームにいるクライアントに送信する (送信元を含む)
+    io.to('game').emit('sensor', data);
   });
 
   socket.on('disconnect', () => {
@@ -47,7 +52,7 @@ io.on('connection', (socket) => {
 });
 
 // Renderが指定するポートでリッスンするように修正します
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`listening on *:${PORT}`);
 });
