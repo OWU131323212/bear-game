@@ -5,7 +5,11 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 const io = new Server(server);
 
-app.use(express.static('public'));
+// プロジェクトのルートディレクトリにある静的ファイル（new_game.htmlなど）を配信するように設定します
+app.use(express.static(__dirname));
+
+// ルートURL ("/") にアクセスがあった場合に new_game.html を表示します
+app.get('/', (req, res) => { res.sendFile(__dirname + '/new_game.html'); });
 
 io.on('connection', (socket) => {
   // Chat functionality (for index.html)
@@ -42,6 +46,8 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(8080, () => {
-  console.log('listening on *:8080');
+// Renderが指定するポートでリッスンするように修正します
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`listening on *:${PORT}`);
 });
